@@ -16,13 +16,19 @@ int main(int argc, char **argv) {
   config.ip = "127.0.0.1";
   config.port = 1234;
   config.workers = 1;
-  config.userlimit = 2;
+  config.userlimit = 5;
   config.verbose = true;
   parse_console_parameters(argc, argv, config);
 
   if (!help_opt) {
     try {
+      boost::thread_group threads_;  // thread_pool
       boost::asio::io_context io_context;
+      boost::asio::io_context::work work_(io_context);
+      for (std::size_t i = 0; i < config.workers; ++i) {
+          threads_.create_thread(
+              boost::bind(&boost::asio::io_context::run, &io_context));
+      }
       tcp::endpoint endpoint(tcp::v4(), config.port);
       chat_server server(io_context, endpoint, config);
 

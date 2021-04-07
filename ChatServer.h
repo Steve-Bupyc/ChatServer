@@ -96,8 +96,8 @@ class chat_room {
 class chat_session : public chat_participant,
                      public std::enable_shared_from_this<chat_session> {
  public:
-  chat_session(tcp::socket socket, chat_room& room)
-      : socket_(std::move(socket)), room_(room) {}
+  chat_session(tcp::socket socket, chat_room& room, bool verbose)
+      : socket_(std::move(socket)), room_(room), verbose(verbose) {}
 
   void start() {
     auto ip_addr = socket_.remote_endpoint().address().to_string();
@@ -125,6 +125,9 @@ class chat_session : public chat_participant,
           if (!ec && read_msg_.decode_header()) {
             do_read_body();
           } else {
+            if (verbose) {
+                std::cout << "User left chat\n";
+            }
             room_.leave(shared_from_this());
           }
         });
@@ -136,21 +139,23 @@ class chat_session : public chat_participant,
         socket_, boost::asio::buffer(read_msg_.body(), read_msg_.body_length()),
         [this, self](boost::system::error_code ec, std::size_t /*length*/) {
           if (!ec) {
-            /// <time>
             std::string msg_with_time(currentDateTime());
             msg_with_time += " ";
             msg_with_time += name;
             msg_with_time += " ";
             msg_with_time += read_msg_.body();
             msg_with_time += " ";            
-
-            std::cout << msg_with_time;
-            /// </time>
+            if (verbose) {
+                std::cout << msg_with_time + "\n";
+            }
             chat_message message_with_time(room_.get_message(msg_with_time));
             read_msg_.clear();
-            room_.deliver(/*read_msg_*/ message_with_time);
+            room_.deliver(message_with_time);
             do_read_header();
           } else {
+            if (verbose) {
+                std::cout << "User left chat\n";
+            }
             room_.leave(shared_from_this());
           }
         });
@@ -169,6 +174,9 @@ class chat_session : public chat_participant,
               do_write();
             }
           } else {
+            if (verbose) {
+                std::cout << "User left chat\n";
+            }
             room_.leave(shared_from_this());
           }
         });
@@ -178,7 +186,7 @@ class chat_session : public chat_participant,
   chat_room& room_;
   chat_message read_msg_;
   chat_message_queue write_msgs_;
-
+  bool verbose;
   const std::string currentDateTime() {
     time_t now = time(0);
     struct tm tstruct;
@@ -208,8 +216,10 @@ class chat_server {
         [this](boost::system::error_code ec, tcp::socket socket) {
           if (!ec) {            
             if (room_.users_num < room_.userlimit) {
-              std::cout << "user joined\n";
-              std::make_shared<chat_session>(std::move(socket), room_)->start();
+              if (verbose) {
+                  std::cout << "user joined\n";
+              }
+              std::make_shared<chat_session>(std::move(socket), room_, verbose)->start();
             } else {
               if (verbose) {
                 std::cout << "Number of users has reached its limit.\n";
